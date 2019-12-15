@@ -1,0 +1,92 @@
+version: 2.1
+
+orbs:
+  gcp-gcr: circleci/gcp-gcr@0.6.1
+
+jobs:
+  terraform:
+    docker:
+      - image: hashicorp/terraform:0.12.17
+    steps:
+      - checkout
+      - run:
+          name: Create Service Account key file from environment variable
+          working_directory: terraform
+          command: echo ${TF_SERVICE_ACCOUNT_KEY} > account.json
+      - run:
+          name: Show Terraform version
+          command: terraform version
+      - run:
+          name: Download required Terraform plugins
+          working_directory: terraform
+          command: terraform init
+      - run:
+          name: Validate Terraform configuration
+          working_directory: terraform
+          command: terraform validate
+      - run:
+          name: Create Terraform plan
+          working_directory: terraform
+          command: terraform plan -out /tmp/tf.plan
+      - run:
+          name: Run Terraform plan
+          working_directory: terraform
+          command: terraform apply /tmp/tf.plan
+  k8s_deploy:
+    docker:
+      - image: kiwigrid/gcloud-kubectl-helm:3.0.1-272.0.0-218
+    steps:
+      - checkout
+      - run:
+          name: Authorize gcloud on GKE
+          working_directory: helm
+          command: |
+            echo ${GCLOUD_SERVICE_KEY} > gcloud-service-key.json
+            gcloud auth activate-service-account --key-file=gcloud-service-key.json
+            gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} --zone ${GOOGLE_COMPUTE_ZONE} --project ${GOOGLE_PROJECT_ID}
+      - run:
+          name: Wait a little until k8s worker nodes up
+          command: sleep 30
+      - run:
+          name: Create IRIS namespace if it doesn't exist
+          command: kubectl get ns iris || kubectl create ns iris
+      - run:
+          name: Run Helm release deployment
+          working_directory: helm
+          command: |
+            helm upgrade iris-rest \
+              --install \
+              . \
+              --namespace iris \
+              --wait \
+              --timeout 300s \
+              --atomic \
+              --set image.repository=eu.gcr.io/${GOOGLE_PROJECT_ID}/iris-rest \
+              --set image.tag=${CIRCLE_SHA1}
+      - run:
+          name: Check Helm release status
+          command: helm list --all-namespaces --all
+      - run:
+          name: Check Kubernetes resources status
+          command: |
+            kubectl -n iris get pods
+            echo
+            kubectl -n iris get services
+workflows:
+  main:
+    jobs:
+      - terraform
+      - gcp-gcr/build-and-push-image:
+          dockerfile: Dockerfile
+          gcloud-service-key: GCLOUD_SERVICE_KEY
+          google-compute-zone: GOOGLE_COMPUTE_ZONE
+          google-project-id: GOOGLE_PROJECT_ID
+          registry-url: eu.gcr.io
+          image: iris-rest
+          path: .
+          tag: ${CIRCLE_SHA1}
+      - k8s_deploy:
+          requires:
+            - terraform
+            - gcp-gcr/build-and-push-image
+

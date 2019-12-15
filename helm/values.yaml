@@ -1,0 +1,26 @@
+namespaceOverride: iris-rest
+
+replicaCount: 1
+
+strategy: |
+  type: Recreate
+
+image:
+  repository: eu.gcr.io/iris-rest
+  tag: v1
+
+webPort:
+  name: web
+  value: 52773 
+
+service:
+  enabled: true
+  name: iris-rest
+  type: LoadBalancer
+  loadBalancerIP: ""
+  ports:
+    web:
+      port: 52773
+      targetPort: 52773
+      protocol: TCP
+

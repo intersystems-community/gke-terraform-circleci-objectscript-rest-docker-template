@@ -1,0 +1,9 @@
+apiVersion: v2
+name: iris-rest
+version: 0.1.0
+appVersion: 1.0.3
+description: Helm for ObjectScript-REST-Docker-template application
+sources:
+- https://github.com/intersystems-community/objectscript-rest-docker-template
+- https://github.com/intersystems-community/gke-terraform-circleci-objectscript-rest-docker-template
+

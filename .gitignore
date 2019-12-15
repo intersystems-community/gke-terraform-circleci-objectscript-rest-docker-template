@@ -1,2 +1,4 @@
 .DS_Store
-
+terraform/.terraform/
+terraform/*.plan
+terraform/*.json
